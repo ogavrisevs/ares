@@ -2,10 +2,12 @@ import os
 import sqlite3
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from fastapi.staticfiles import StaticFiles
 
 
 DATABASE_PATH = os.getenv("DATABASE_PATH", "gps.db")
@@ -99,3 +101,10 @@ def list_locations(limit: int = Query(default=100, ge=1, le=1000)) -> list[Locat
             (limit,),
         ).fetchall()
     return [row_to_location(row) for row in rows]
+
+
+app.mount(
+    "/",
+    StaticFiles(directory=Path(__file__).resolve().parent.parent / "web", html=True),
+    name="web",
+)

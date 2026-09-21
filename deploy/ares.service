@@ -1,0 +1,23 @@
+[Unit]
+Description=Ares Python backend API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=ares
+Group=ares
+WorkingDirectory=/opt/ares/backend
+Environment=PYTHONUNBUFFERED=1
+Environment=DATABASE_PATH=/var/lib/ares/gps.db
+ExecStart=/opt/ares/backend/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/ares
+
+[Install]
+WantedBy=multi-user.target

@@ -12,7 +12,7 @@ pip install -r requirements.txt
 uvicorn app:app --reload
 ```
 
-The API is available at `http://localhost:8000`. Interactive API documentation is at `/docs`.
+The map page is available at `http://localhost:8000` and the API is available at `http://localhost:8000`. Interactive API documentation is at `/docs`.
 
 ### Allow connections from a remote server
 

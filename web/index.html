@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPS Locations</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3Fk2iCwF0f8J1xJrV8Qv3d7Q1fR5w=" crossorigin="">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #173042;
+      background: #edf3f2;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    main {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 { margin: 0; font-size: clamp(1.6rem, 3vw, 2.4rem); }
+    p { margin: 6px 0 0; color: #5f7074; }
+
+    .status {
+      color: #466166;
+      font-size: 0.9rem;
+      text-align: right;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 18px;
+    }
+
+    #map {
+      min-height: 560px;
+      border: 1px solid #cbdad7;
+      border-radius: 8px;
+      box-shadow: 0 12px 30px rgb(33 65 72 / 10%);
+    }
+
+    aside {
+      min-height: 560px;
+      overflow: hidden;
+      border: 1px solid #cbdad7;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 12px 30px rgb(33 65 72 / 8%);
+    }
+
+    aside h2 {
+      margin: 0;
+      padding: 18px 18px 12px;
+      font-size: 1rem;
+      border-bottom: 1px solid #e1eae8;
+    }
+
+    #history {
+      max-height: 510px;
+      overflow-y: auto;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .location {
+      display: block;
+      width: 100%;
+      padding: 14px 18px;
+      border: 0;
+      border-bottom: 1px solid #edf2f1;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .location:hover, .location:focus-visible { background: #f0f7f5; }
+    .location strong { display: block; font-variant-numeric: tabular-nums; }
+    .location time { display: block; margin-top: 4px; color: #718287; font-size: 0.82rem; }
+    .empty { padding: 18px; color: #718287; }
+
+    @media (max-width: 800px) {
+      body { padding: 14px; }
+      header { display: block; }
+      .status { margin-top: 10px; text-align: left; }
+      .layout { grid-template-columns: 1fr; }
+      #map, aside { min-height: 420px; }
+      #history { max-height: 300px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>GPS locations</h1>
+        <p>Latest position and recorded history</p>
+      </div>
+      <div class="status" id="status" role="status">Loading locations...</div>
+    </header>
+
+    <section class="layout" aria-label="Location map and history">
+      <div id="map" aria-label="Map of recorded locations"></div>
+      <aside>
+        <h2>History</h2>
+        <ul id="history"><li class="empty">No locations recorded yet.</li></ul>
+      </aside>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    const map = L.map('map').setView([20, 0], 2);
+    const markers = L.layerGroup().addTo(map);
+    const history = document.querySelector('#history');
+    const status = document.querySelector('#status');
+    const apiBase = window.location.port === '8000'
+      ? ''
+      : `${window.location.protocol}//${window.location.hostname}:8000`;
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    function formatDate(value) {
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      }).format(new Date(value));
+    }
+
+    function renderLocations(locations) {
+      markers.clearLayers();
+      history.replaceChildren();
+
+      if (!locations.length) {
+        history.innerHTML = '<li class="empty">No locations recorded yet.</li>';
+        status.textContent = '0 locations';
+        return;
+      }
+
+      const bounds = [];
+      locations.forEach((location, index) => {
+        const point = [location.latitude, location.longitude];
+        bounds.push(point);
+        const marker = L.marker(point).bindPopup(
+          `<strong>${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}</strong><br>${formatDate(location.recorded_at)}`
+        );
+        marker.addTo(markers);
+
+        const item = document.createElement('li');
+        const button = document.createElement('button');
+        button.className = 'location';
+        button.type = 'button';
+        button.innerHTML = `<strong>${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}</strong><time>${formatDate(location.recorded_at)}</time>`;
+        button.addEventListener('click', () => {
+          map.setView(point, 15);
+          marker.openPopup();
+        });
+        item.appendChild(button);
+        history.appendChild(item);
+
+        if (index === 0) marker.openPopup();
+      });
+
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+      status.textContent = `${locations.length} location${locations.length === 1 ? '' : 's'}`;
+    }
+
+    async function loadLocations() {
+      try {
+        const response = await fetch(`${apiBase}/locations?limit=100`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        renderLocations(await response.json());
+      } catch (error) {
+        status.textContent = 'Could not load locations';
+        history.innerHTML = '<li class="empty">The location service is unavailable.</li>';
+        console.error(error);
+      }
+    }
+
+    loadLocations();
+    setInterval(loadLocations, 30000);
+  </script>
+</body>
+</html>
