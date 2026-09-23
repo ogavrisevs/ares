@@ -33,7 +33,7 @@ ares-server ansible_host=192.0.2.10 ansible_user=ubuntu
 Check that Ansible can reach the server:
 
 ```sh
-ansible -i deploy/inventory.ini ares -m ping
+ansible -i poc/deploy/inventory.ini ares -m ping
 ```
 
 Run
@@ -42,7 +42,7 @@ Run
 From the repo root:
 
 ```sh
-ansible-playbook -i deploy/inventory.ini deploy/playbook.yml
+ansible-playbook -i poc/deploy/inventory.ini poc/deploy/playbook.yml
 ```
 
 Add `--ask-become-pass` (`-K`) if `sudo` asks for a password. Re-run the same

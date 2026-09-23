@@ -5,7 +5,7 @@ Small REST API that receives GPS coordinates and stores them in SQLite.
 ### Run
 
 ```sh
-cd backend
+cd poc/backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -19,7 +19,7 @@ The map page is available at `http://localhost:8000` and the API is available at
 Start Uvicorn on all network interfaces:
 
 ```sh
-cd backend
+cd poc/backend
 .venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
