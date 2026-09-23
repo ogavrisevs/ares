@@ -1,0 +1,95 @@
+- name: Deploy Ares
+  hosts: ares
+  become: true
+
+  tasks:
+    - name: Install packages
+      ansible.builtin.apt:
+        name: [nginx, python3.12-venv, acl]
+        update_cache: true
+
+    - name: Create ares user
+      ansible.builtin.user:
+        name: ares
+        system: true
+        home: /opt/ares
+        create_home: false
+        shell: /usr/sbin/nologin
+
+    - name: Create directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: ares
+        group: ares
+      loop: [/opt/ares, /var/lib/ares]
+
+    - name: Create app directories
+      ansible.builtin.file:
+        path: "/opt/ares/{{ item }}"
+        state: directory
+        owner: ares
+        group: ares
+      loop: [backend, web]
+
+    - name: Copy app files
+      ansible.builtin.copy:
+        src: "../{{ item }}"
+        dest: "/opt/ares/{{ item }}"
+        owner: ares
+        group: ares
+      loop: [backend/app.py, backend/requirements.txt, web/index.html]
+      notify: Restart ares
+
+    - name: Install Python dependencies
+      become_user: ares
+      ansible.builtin.pip:
+        requirements: /opt/ares/backend/requirements.txt
+        virtualenv: /opt/ares/backend/.venv
+        virtualenv_command: python3.12 -m venv
+      notify: Restart ares
+
+    - name: Install systemd unit
+      ansible.builtin.copy:
+        src: ares.service
+        dest: /etc/systemd/system/ares.service
+      notify: Restart ares
+
+    - name: Install nginx site
+      ansible.builtin.copy:
+        src: ares-nginx.conf
+        dest: /etc/nginx/sites-available/ares
+      notify: Reload nginx
+
+    - name: Enable nginx site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/ares
+        dest: /etc/nginx/sites-enabled/ares
+        state: link
+      notify: Reload nginx
+
+    - name: Remove default nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
+    - name: Start services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+        daemon_reload: true
+      loop: [ares, nginx]
+
+  handlers:
+    - name: Restart ares
+      ansible.builtin.systemd:
+        name: ares
+        state: restarted
+        daemon_reload: true
+
+    - name: Reload nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
