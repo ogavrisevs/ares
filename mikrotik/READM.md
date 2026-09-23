@@ -1,35 +1,35 @@
 
 ### LTE route -----------------------------------------------------------------
 
-# remove eth1 route 
+# remove eth1 route
 /ip dhcp-client remove [find interface=ether1]
 
 # If no LTE connection is available
 /ip dhcp-client add interface=bridge add-default-route=no disabled=no
 
-# first routeis is to LTE 
+# first routeis is to LTE
 /ip route print
-#Flags: X - disabled, A - active, D - dynamic, C - connect, S - static, r - rip, b - bgp, o - ospf, m - mme, B - blackhole, U - unreachable, P - prohibit 
+#Flags: X - disabled, A - active, D - dynamic, C - connect, S - static, r - rip, b - bgp, o - ospf, m - mme, B - blackhole, U - unreachable, P - prohibit
 # #      DST-ADDRESS        PREF-SRC        GATEWAY            DISTANCE
 # 0 ADS  0.0.0.0/0                          lte1                      2
 # 1 ADC  192.168.1.0/25     192.168.1.80    bridge                    0
 # 2 ADC  192.168.88.0/24    192.168.88.1    bridge                    0
 # 3 ADC  213.175.79.181/32  213.175.79.181  lte1                      0
 
-# get public ip 
+# get public ip
 /ip address print
-#Flags: X - disabled, I - invalid, D - dynamic 
-#      ADDRESS           NETWORK         INTERFACE  
+#Flags: X - disabled, I - invalid, D - dynamic
+#      ADDRESS           NETWORK         INTERFACE
 # 0   ;;; defconf
-#     192.168.88.1/24    192.168.88.0    bridge  
-# 1 D 213.175.79.181/32  213.175.79.181  lte1   
-# 2 D 192.168.1.80/25 192.168.1.0        bridge 
+#     192.168.88.1/24    192.168.88.0    bridge
+# 1 D 213.175.79.181/32  213.175.79.181  lte1
+# 2 D 192.168.1.80/25 192.168.1.0        bridge
 
-# test NAT 
+# test NAT
 /interface list> /ip firewall nat print
-#Flags: X - disabled, I - invalid, D - dynamic 
+#Flags: X - disabled, I - invalid, D - dynamic
 # 0    ;;; defconf: masquerade
-#      chain=srcnat action=masquerade out-interface-list=WAN ipsec-policy=out,none 
+#      chain=srcnat action=masquerade out-interface-list=WAN ipsec-policy=out,none
 
 ### LTE route -----------------------------------------------------------------
 
@@ -71,7 +71,7 @@
 # update packages
 /system package update check-for-updates
 
-# enable winbox access 
+# enable winbox access
 /ip firewall filter add chain=input action=accept protocol=tcp dst-port=8291 in-interface=lte1 place-before=0 comment="Allow WinBox over LTE"
 
 ### GPS -----------------------------------------------------------------------
@@ -98,33 +98,48 @@
 
 # Send the current coordinates to the REST API every minute.
 # Replace the URL with the reachable address of the Python server.
-/system script add name=send-gps-location source={
-	:local latitude [/system gps get latitude]
-	:local longitude [/system gps get longitude]
+/system script remove [find name=send-gps-location]
+/system script add name=send-gps-location policy=read,write,test source={
+    # The position comes from monitor; "get" only returns GPS settings.
+    :local gps [/system gps monitor once as-value]
 
-	# RouterOS reports 0/0 when there is no valid GPS fix.
-	:if (($latitude = 0) and ($longitude = 0)) do={
-		:log warning "GPS has no fix; location was not sent"
-		:return
-	}
+    # The receiver reports NMEA degrees and minutes (5656.6891 = 56 deg 56.6891 min).
+    # Convert to decimal degrees with integer maths, since RouterOS has no floats.
+    # Assumes the northern and eastern hemispheres (no sign is reported).
+    :local toDecimal do={
+        :local s [:tostr $1]
+        :local dot [:find $s "."]
+        :local ip [:pick $s 0 $dot]
+        :if ([:len $ip] < 4) do={ :return $s }
+        :local fp [:pick ([:pick $s ($dot + 1) [:len $s]] . "0000") 0 4]
+        # Strip leading zeros so :tonum does not read the value as octal.
+        :while (([:len $ip] > 1) and ([:pick $ip 0 1] = "0")) do={ :set ip [:pick $ip 1 [:len $ip]] }
+        :while (([:len $fp] > 1) and ([:pick $fp 0 1] = "0")) do={ :set fp [:pick $fp 1 [:len $fp]] }
+        :local n [:tonum $ip]
+        :local micro [:tostr (((($n % 100) * 10000) + [:tonum $fp]) * 100 / 60)]
+        :while ([:len $micro] < 6) do={ :set micro ("0" . $micro) }
+        :return (($n / 100) . "." . $micro)
+    }
 
-	# The API assigns a UTC timestamp when recorded_at is omitted.
-	:local payload ("{\"latitude\":" . $latitude . ",\"longitude\":" . $longitude . "}")
+    :if ((($gps->"valid") != true) and (($gps->"valid") != "yes")) do={
+        :log warning "GPS has no fix; location was not sent"
+    } else={
+        # The API assigns a UTC timestamp when recorded_at is omitted.
+        :local payload ("{\"latitude\":" . [$toDecimal ($gps->"latitude")] . ",\"longitude\":" . [$toDecimal ($gps->"longitude")] . "}")
 
-	:do {
-		/tool fetch url="http://3.121.113.5:8000/locations" \\
-			http-method=post \\
-			http-header-field="Content-Type: application/json" \\
-			http-data=$payload \\
-			output=none
-		:log info ("GPS location sent: " . $latitude . "," . $longitude)
-	} on-error={
-		:log error "Could not send GPS location to REST API"
-	}
+        :do {
+            /tool fetch url="http://3.121.113.5:8000/locations" http-method=post http-header-field="Content-Type: application/json" http-data=$payload output=none
+            :log info ("GPS location sent: " . $payload)
+        } on-error={
+            :log error ("Could not send GPS location to REST API: " . $payload)
+        }
+    }
 }
 
-/system scheduler add name=send-gps-location interval=1m on-event=send-gps-location start-time=startup
+/system scheduler remove [find name=send-gps-location]
+/system scheduler add name=send-gps-location interval=1m on-event=send-gps-location start-time=startup policy=read,write,test
 
-# Run once manually to test it:
+# Test it by hand and read the log:
+# /system gps monitor once
 # /system script run send-gps-location
-
+# /log print where message~"GPS"
