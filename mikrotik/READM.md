@@ -154,7 +154,7 @@ Replace the URL with the reachable address of the Python server.
         :local payload ("{\"latitude\":" . [$toDecimal ($gps->"latitude")] . ",\"longitude\":" . [$toDecimal ($gps->"longitude")] . "}")
 
         :do {
-            /tool fetch url="http://3.121.113.5:8000/locations" http-method=post http-header-field="Content-Type: application/json" http-data=$payload output=none
+            /tool fetch url="http://<server-ip>:8000/locations" http-method=post http-header-field="Content-Type: application/json" http-data=$payload output=none
             :log info ("GPS location sent: " . $payload)
         } on-error={
             :log error ("Could not send GPS location to REST API: " . $payload)

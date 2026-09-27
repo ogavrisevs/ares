@@ -1,0 +1,47 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "poc/backend/**"
+      - "poc/web/**"
+      - "poc/deploy/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      ARES_SERVER_IP: ${{ vars.ARES_SERVER_IP }}
+      ARES_SSH_USER: ${{ vars.ARES_SSH_USER }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check configuration
+        run: |
+          if [ -z "$ARES_SERVER_IP" ]; then
+            echo "::error::Set the ARES_SERVER_IP variable in the repository or production environment settings"
+            exit 1
+          fi
+
+      - name: Install Ansible
+        run: pipx install --include-deps ansible
+
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$ARES_SERVER_IP" >> ~/.ssh/known_hosts
+
+      - name: Run playbook
+        run: ansible-playbook -i poc/deploy/inventory.ini poc/deploy/playbook.yml
