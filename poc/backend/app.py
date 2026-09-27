@@ -1,3 +1,4 @@
+import math
 import os
 import sqlite3
 from contextlib import asynccontextmanager
@@ -88,19 +89,57 @@ def create_location(location: LocationCreate) -> Location:
     return row_to_location(row)
 
 
+def distance_meters(a: sqlite3.Row, b: sqlite3.Row) -> float:
+    lat1, lon1 = math.radians(a["latitude"]), math.radians(a["longitude"])
+    lat2, lon2 = math.radians(b["latitude"]), math.radians(b["longitude"])
+    h = (
+        math.sin((lat2 - lat1) / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
+    )
+    return 2 * 6_371_000 * math.asin(math.sqrt(h))
+
+
 @app.get("/locations", response_model=list[Location])
-def list_locations(limit: int = Query(default=100, ge=1, le=1000)) -> list[Location]:
+def list_locations(
+    limit: int = Query(default=100, ge=0),
+    start: datetime | None = None,
+    end: datetime | None = None,
+    min_distance: float = Query(default=0, ge=0),
+) -> list[Location]:
+    """List newest locations first.
+
+    `start`/`end` bound recorded_at (end exclusive). With `min_distance` (meters),
+    points closer than that to the previously kept point are skipped, and `limit`
+    applies to the points that remain. `limit=0` returns all.
+    """
+    conditions = []
+    params: list[str] = []
+    if start is not None:
+        conditions.append("julianday(recorded_at) >= julianday(?)")
+        params.append(start.isoformat())
+    if end is not None:
+        conditions.append("julianday(recorded_at) < julianday(?)")
+        params.append(end.isoformat())
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    kept: list[sqlite3.Row] = []
     with get_connection() as connection:
-        rows = connection.execute(
-            """
+        cursor = connection.execute(
+            f"""
             SELECT id, latitude, longitude, recorded_at
             FROM locations
+            {where}
             ORDER BY recorded_at DESC, id DESC
-            LIMIT ?
             """,
-            (limit,),
-        ).fetchall()
-    return [row_to_location(row) for row in rows]
+            params,
+        )
+        for row in cursor:
+            if min_distance and kept and distance_meters(kept[-1], row) < min_distance:
+                continue
+            kept.append(row)
+            if limit and len(kept) >= limit:
+                break
+    return [row_to_location(row) for row in kept]
 
 
 app.mount(

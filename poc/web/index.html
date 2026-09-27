@@ -37,6 +37,30 @@
     h1 { margin: 0; font-size: clamp(1.6rem, 3vw, 2.4rem); }
     p { margin: 6px 0 0; color: #5f7074; }
 
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .controls label { color: #466166; font-size: 0.9rem; }
+
+    .controls input, .controls select, .controls button {
+      margin-left: 6px;
+      padding: 6px 10px;
+      border: 1px solid #cbdad7;
+      border-radius: 6px;
+      background: #fff;
+      color: inherit;
+      font: inherit;
+      font-size: 0.9rem;
+    }
+
+    .controls button { margin-left: 0; cursor: pointer; }
+    .controls button:hover { background: #f0f7f5; }
+
     .status {
       color: #466166;
       font-size: 0.9rem;
@@ -117,6 +141,20 @@
       <div class="status" id="status" role="status">Loading locations...</div>
     </header>
 
+    <div class="controls">
+      <label>Day
+        <input type="date" id="day">
+      </label>
+      <button type="button" id="clear-day">All days</button>
+      <label>Show
+        <select id="limit">
+          <option value="100">100</option>
+          <option value="500">500</option>
+          <option value="all">All</option>
+        </select>
+      </label>
+    </div>
+
     <section class="layout" aria-label="Location map and history">
       <div id="map" aria-label="Map of recorded locations"></div>
       <aside>
@@ -132,6 +170,9 @@
     const markers = L.layerGroup().addTo(map);
     const history = document.querySelector('#history');
     const status = document.querySelector('#status');
+    const dayInput = document.querySelector('#day');
+    const limitSelect = document.querySelector('#limit');
+    const MIN_DISTANCE_METERS = 1;
     const apiBase = window.location.port === '8000'
       ? ''
       : `${window.location.protocol}//${window.location.hostname}:8000`;
@@ -153,7 +194,9 @@
       history.replaceChildren();
 
       if (!locations.length) {
-        history.innerHTML = '<li class="empty">No locations recorded yet.</li>';
+        history.innerHTML = dayInput.value
+          ? '<li class="empty">No locations recorded on this day.</li>'
+          : '<li class="empty">No locations recorded yet.</li>';
         status.textContent = '0 locations';
         return;
       }
@@ -186,9 +229,23 @@
       status.textContent = `${locations.length} location${locations.length === 1 ? '' : 's'}`;
     }
 
+    function buildQuery() {
+      const params = new URLSearchParams({
+        min_distance: MIN_DISTANCE_METERS,
+        limit: limitSelect.value === 'all' ? 0 : limitSelect.value
+      });
+      if (dayInput.value) {
+        // Local-time day boundaries, sent as UTC.
+        const [year, month, date] = dayInput.value.split('-').map(Number);
+        params.set('start', new Date(year, month - 1, date).toISOString());
+        params.set('end', new Date(year, month - 1, date + 1).toISOString());
+      }
+      return params;
+    }
+
     async function loadLocations() {
       try {
-        const response = await fetch(`${apiBase}/locations?limit=100`);
+        const response = await fetch(`${apiBase}/locations?${buildQuery()}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         renderLocations(await response.json());
       } catch (error) {
@@ -197,6 +254,13 @@
         console.error(error);
       }
     }
+
+    dayInput.addEventListener('change', loadLocations);
+    limitSelect.addEventListener('change', loadLocations);
+    document.querySelector('#clear-day').addEventListener('click', () => {
+      dayInput.value = '';
+      loadLocations();
+    });
 
     loadLocations();
     setInterval(loadLocations, 30000);
