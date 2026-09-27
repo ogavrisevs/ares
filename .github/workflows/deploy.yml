@@ -59,4 +59,7 @@ jobs:
       - name: Run playbook
         env:
           ANSIBLE_PRIVATE_KEY_FILE: ~/.ssh/id_agent
+          # Survive transient SSH drops (e.g. during apt update) instead of failing as UNREACHABLE.
+          ANSIBLE_SSH_RETRIES: "5"
+          ANSIBLE_SSH_ARGS: "-C -o ControlMaster=auto -o ControlPersist=60s -o ServerAliveInterval=15 -o ServerAliveCountMax=8"
         run: ansible-playbook -i poc/deploy/inventory.ini poc/deploy/playbook.yml
