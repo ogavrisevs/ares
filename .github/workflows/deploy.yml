@@ -42,7 +42,17 @@ jobs:
           # Strip CRs so keys pasted from Windows still parse.
           printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_agent
           chmod 600 ~/.ssh/id_agent
-          ssh-keygen -y -f ~/.ssh/id_agent > /dev/null || { echo "::error::Secret id_agent is not a valid private key"; exit 1; }
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "::error::Secret id_agent is empty or not available to this job"
+            exit 1
+          fi
+          if ! ssh-keygen -y -f ~/.ssh/id_agent > /dev/null; then
+            # The header and line count are not secret and show what was pasted.
+            echo "First line: $(head -n1 ~/.ssh/id_agent)"
+            echo "Lines: $(wc -l < ~/.ssh/id_agent)"
+            echo "::error::Secret id_agent is not a valid private key"
+            exit 1
+          fi
           ssh-keyscan -H "$ARES_SERVER_IP" >> ~/.ssh/known_hosts
 
       - name: Run playbook
