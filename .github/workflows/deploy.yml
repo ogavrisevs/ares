@@ -53,6 +53,7 @@ jobs:
             echo "::error::Secret id_agent is not a valid private key"
             exit 1
           fi
+          echo "Deploy key: $(ssh-keygen -y -f ~/.ssh/id_agent | ssh-keygen -lf -)"
           ssh-keyscan -H "$ARES_SERVER_IP" >> ~/.ssh/known_hosts
 
       - name: Run playbook
