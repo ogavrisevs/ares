@@ -63,7 +63,7 @@ changes `poc/backend`, `poc/web` or `poc/deploy`, and on manual
 
 - Variable `ARES_SERVER_IP`: server address
 - Variable `ARES_SSH_USER` (optional): SSH user, defaults to `ubuntu`
-- Secret `SSH_PRIVATE_KEY`: private key whose public key is in the SSH user's
+- Secret `id_agent`: private key whose public key is in the SSH user's
   `~/.ssh/authorized_keys`
 
 The SSH user needs passwordless `sudo` (the default `ubuntu` user on EC2 has it).
